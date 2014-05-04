@@ -16,7 +16,7 @@
         <activity
             android:name="com.example.stopwatch.Stopwatch"
             android:label="@string/app_name"
-            android:screenOrientation="partrait" >
+            android:screenOrientation="portrait" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
