@@ -1,0 +1,74 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    tools:context=".Stopwatch" >
+
+    <TextView
+        android:id="@+id/timeText"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/timeText"
+        android:gravity="center"
+        android:layout_gravity="center"
+        android:textSize="28sp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp" />
+
+    <LinearLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/gray" >
+
+        <Button
+            android:id="@+id/startButton"
+            android:layout_width="0px"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/startButtonText"
+            android:paddingLeft="10dp" />
+
+        <Button
+            android:id="@+id/timeLapButton"
+            android:layout_width="0px"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/timeLapButtonText"
+            android:paddingRight="10dp"
+            android:clickable="false" />
+
+    </LinearLayout>
+    
+    <LinearLayout 
+        android:id="@+id/lapListTitle"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content">
+        <TextView 
+            android:layout_width="0px"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/lapNOTitle"
+            android:textSize="18sp"/>
+        <TextView 
+            android:layout_width="0px"
+            android:layout_height="wrap_content"
+            android:layout_weight="2"
+            android:text="@string/lapTimeTitle"
+            android:textSize="18sp"/>
+        <TextView 
+            android:layout_width="0px"
+            android:layout_height="wrap_content"
+            android:layout_weight="2"
+            android:text="@string/deltaTimeTitle"
+            android:textSize="18sp"/>
+    </LinearLayout>
+
+    <ListView
+        android:id="@+id/lapListView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" >
+
+    </ListView>
+
+</LinearLayout>
