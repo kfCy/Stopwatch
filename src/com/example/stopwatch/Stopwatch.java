@@ -293,4 +293,10 @@ public class Stopwatch extends Activity {
 		}
 	}
 
+	@Override
+	protected void onPause() {
+		super.onPause();
+		
+		releaseWakeLock();
+	}
 }
