@@ -3,7 +3,10 @@ package com.example.stopwatch;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.os.PowerManager;
+import android.os.PowerManager.WakeLock;
 import android.app.Activity;
+import android.content.Context;
 import android.util.Log;
 import android.view.Menu;
 import android.view.View;
@@ -43,6 +46,8 @@ public class Stopwatch extends Activity {
 	
 	private LinearLayout lapListTitle = null;
 	
+	private WakeLock wakeLock = null;
+	
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -68,6 +73,8 @@ public class Stopwatch extends Activity {
 					// Stop the thread of updating time
 					stopLapTimeThread();
 					
+					releaseWakeLock();
+					
 				} else if (STOPWATCHSTT_STOP == stopWatchStt) {
 					// Should start stopWatch
 					// Change the text of startButton
@@ -84,6 +91,8 @@ public class Stopwatch extends Activity {
 					
 					// Start another thread to update the time
 					startLapTimeThread();
+					
+					requireWakeLock();
 				}
 			}
 		});
@@ -259,6 +268,29 @@ public class Stopwatch extends Activity {
 		// Inflate the menu; this adds items to the action bar if it is present.
 		getMenuInflater().inflate(R.menu.stopwatch, menu);
 		return true;
+	}
+	
+	/**
+	 * Description This function performs to require the wake lock, and then ask the screen keeps light if the wake lock is required
+	 * */
+	private void requireWakeLock() {
+		if (null == wakeLock) {
+			PowerManager powerManager = (PowerManager)this.getSystemService(Context.POWER_SERVICE);
+			wakeLock = powerManager.newWakeLock(PowerManager.FULL_WAKE_LOCK, "Stopwatch");
+			if (null != wakeLock) {
+				wakeLock.acquire();
+			}
+		}
+	}
+	
+	/**
+	 * Description: This function performs to release the wakeLock if it's required
+	 * */
+	private void releaseWakeLock() {
+		if (null != wakeLock) {
+			wakeLock.release();
+			wakeLock = null;
+		}
 	}
 
 }
