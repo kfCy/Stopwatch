@@ -2,6 +2,7 @@ package com.example.stopwatch;
 
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
@@ -31,13 +32,18 @@ public class Stopwatch extends Activity {
 	private static final int LAPBTN_STT_RESET = 1;
 	private int lapBtnStt = LAPBTN_STT_RESET;
 	
-	private Thread lapTimeThread = null;
-	private boolean startLap = false;
+	// This thread performs to get the current time and send it to UI thread to be displayed
+	private Thread updateTimeThread = null;
 	private long baseTime = 0;
 	private long prevTime = 0;
 	
+	// This thread performs to get the lap time and handle it and send it to UI thread to be displayed
+	private Thread lapTimeThread = null;
+	private Handler lapTimeHandler = null;
+	
 	private final int STOPWATCH_UPDATE_TIME_MSG = 0;
-	private final int STOPWATCH_UPDATE_LAP_MSG = 1;
+	private final int STOPWATCH_CAL_LAP_TIME = 1;
+	private final int STOPWATCH_ADD_LAP = 2;
 	
 	private LapRecordAdapter lapRecordAdapter = null;
 	private ListView lapListView = null;
@@ -64,35 +70,11 @@ public class Stopwatch extends Activity {
 				// TODO Auto-generated method stub
 				if (STOPWATCHSTT_START == stopWatchStt) {
 					// Should stop stopWatch
-					startButton.setText("Start");
-					timeLapButton.setText("Reset");
-					
-					lapBtnStt = LAPBTN_STT_RESET;
-					stopWatchStt = STOPWATCHSTT_STOP;
-					
-					// Stop the thread of updating time
-					stopLapTimeThread();
-					
-					releaseWakeLock();
+				    stopStopwatch();
 					
 				} else if (STOPWATCHSTT_STOP == stopWatchStt) {
 					// Should start stopWatch
-					// Change the text of startButton
-					startButton.setText("Stop");
-					
-					timeLapButton.setEnabled(true);
-					timeLapButton.setText("Lap");
-					
-					lapBtnStt = LAPBTN_STT_LAP;
-					stopWatchStt = STOPWATCHSTT_START;
-					
-					baseTime = System.currentTimeMillis();
-					prevTime = baseTime;
-					
-					// Start another thread to update the time
-					startLapTimeThread();
-					
-					requireWakeLock();
+					startStopwatch();
 				}
 			}
 		});
@@ -104,12 +86,14 @@ public class Stopwatch extends Activity {
 			public void onClick(View v) {
 				// TODO Auto-generated method stub
 				if (LAPBTN_STT_LAP == lapBtnStt) {
-					updateLapList();
+					sendMsgToCalLapTime();
 				} else if (LAPBTN_STT_RESET == lapBtnStt) {
 					clearLap();
 				}
 			}
 		});
+		// Should disable the timeLapButton when first entering to the Stopwatch
+		timeLapButton.setEnabled(false);
 		
 		lapRecordAdapter = new LapRecordAdapter(this);
 		lapListView = (ListView)findViewById(R.id.lapListView);
@@ -119,30 +103,70 @@ public class Stopwatch extends Activity {
 		lapListTitle.setVisibility(View.INVISIBLE);
 	}
 	
-	private void stopLapTimeThread() {
-		if (null != lapTimeThread) {
-			lapTimeThread = null;
+	private void stopStopwatch() {
+		// Change the text of startButton to "Start"
+		startButton.setText("Start");
+		// Change the text of timeLapButton to "Reset"
+		timeLapButton.setText("Reset");
+		
+		lapBtnStt = LAPBTN_STT_RESET;
+		// Changing the status of Stopwatch to STOPWATCHSTT_STOP to stop the child thread 
+		stopWatchStt = STOPWATCHSTT_STOP;
+		
+		// Stop the thread of updating time
+		stopUpdateTimeThread();
+		
+		// Stop the thread of lap time
+		stopLapTimeThread();
+		
+		releaseWakeLock();
+	}
+	
+	private void startStopwatch() {
+		// Change the text of startButton
+		startButton.setText("Stop");
+		
+		timeLapButton.setEnabled(true);
+		timeLapButton.setText("Lap");
+		
+		lapBtnStt = LAPBTN_STT_LAP;
+		stopWatchStt = STOPWATCHSTT_START;
+		
+		baseTime = System.currentTimeMillis();
+		prevTime = baseTime;
+		
+		// Start another thread to update the time
+		startUpdateTimeThread();
+		
+		// Also start lapTimeThread to receive the msg from Lap Button 
+		// and then calculate the current time and delta time
+		startLapTimeThread();
+		
+		requireWakeLock();
+	}
+	
+	private void stopUpdateTimeThread() {
+		if (null != updateTimeThread) {
+			updateTimeThread = null;
 		}
 	}
 	
-	private void startLapTimeThread() {
-		if (null == lapTimeThread) {
+	private void startUpdateTimeThread() {
+		if (null == updateTimeThread) {
 			try {
-				lapTimeThread = new Thread(new Runnable () {
+				updateTimeThread = new Thread(new Runnable () {
 					@Override
 					public void run() {
 						// Moves the current thread to the background
 						android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
 						
 						while (STOPWATCHSTT_START == stopWatchStt) {
-					    //while (true) {
+							long currentTime = System.currentTimeMillis();
+							String timeString = formatTime(currentTime - baseTime);
+							
 							Message msg = Message.obtain();
-							if (startLap) {
-								msg.what = STOPWATCH_UPDATE_LAP_MSG;
-								startLap = false;
-							} else {
-								msg.what = STOPWATCH_UPDATE_TIME_MSG;
-							}
+							msg.what = STOPWATCH_UPDATE_TIME_MSG;
+							msg.obj = timeString;
 							
 							handler.sendMessage(msg);
 							try {
@@ -155,11 +179,69 @@ public class Stopwatch extends Activity {
 					}
 					
 				});
-				lapTimeThread.start();
+				updateTimeThread.start();
 			
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
+		}
+	}
+	
+	private void startLapTimeThread () {
+		if (null == lapTimeThread) {
+			try {
+				lapTimeThread = new Thread (new Runnable () {
+					public void run () {
+						Looper.prepare();
+						
+						lapTimeHandler = new Handler() {
+							@Override
+							public void handleMessage(Message msg) {
+								switch(msg.what) {
+								case STOPWATCH_CAL_LAP_TIME:
+									LapRecord lapRecord = calLapTime();
+									sendMessageToUIThread(lapRecord);
+									break;
+								}
+							}
+						};
+						
+						Looper.loop();
+					}
+					
+					private void sendMessageToUIThread(LapRecord lapRecord) {
+						Message msg = Message.obtain();
+						msg.what = STOPWATCH_ADD_LAP;
+						msg.obj = lapRecord;
+						handler.sendMessage(msg);
+					}
+				});
+				
+				lapTimeThread.start();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	private void stopLapTimeThread() {
+		if (null != lapTimeThread) {
+			lapTimeThread = null;
+		}
+		
+		if (null != lapTimeHandler) {
+			lapTimeHandler.getLooper().quit();
+		}
+	}
+	
+	/**
+	 *  This function performs to send the message of calculating the Lap time and delta time
+	 */
+	private void sendMsgToCalLapTime() {
+		if (null != lapTimeHandler) {
+			Message msg = Message.obtain();
+			msg.what = STOPWATCH_CAL_LAP_TIME;
+			lapTimeHandler.sendMessage(msg);
 		}
 	}
 	
@@ -171,11 +253,11 @@ public class Stopwatch extends Activity {
 			{
 				switch(msg.what) {
 				case STOPWATCH_UPDATE_TIME_MSG:
-					updateTime();
+					showTime((String)msg.obj);
 					break;
-				//case STOPWATCH_UPDATE_LAP_MSG:
-				//	updateLap();
-				//	break;
+				case STOPWATCH_ADD_LAP:
+					showLap((LapRecord)msg.obj);
+					break;
 				default:
 					break;
 				}
@@ -184,23 +266,21 @@ public class Stopwatch extends Activity {
 	};
 	
 	private String formatTime(long deltaTime) {
-		Log.d(LOG_TAG, "Delta Time: " + deltaTime);
+		//Log.d(LOG_TAG, "Delta Time: " + deltaTime);
 		int millis = (int)(deltaTime % 1000);
 		deltaTime /= 1000;  // second unit
 		int seconds = (int)(deltaTime % 60);
 		deltaTime /= 60;    // minute unit
 		int mins = (int)(deltaTime % 60);
 		int hours = (int)(deltaTime / 60);   // hour unitf
-		Log.d(LOG_TAG, "time: " + hours + ":" + mins + ":" + seconds + ":" + millis);
+		//Log.d(LOG_TAG, "time: " + hours + ":" + mins + ":" + seconds + ":" + millis);
 	    return String.format("%1$02d:%2$02d:%3$02d:%4$03d", hours, mins, seconds, millis);
 	}
 	
 	/**
 	 * This function performs to display the time from the start point
 	 */
-	private void updateTime() {
-		long currentTime = System.currentTimeMillis();
-		String timeString = formatTime(currentTime - baseTime);
+	private void showTime(String timeString) {
 		if (null != timeText) {
 			timeText.setText(timeString);
 		}
@@ -209,7 +289,7 @@ public class Stopwatch extends Activity {
 	/**
 	 * This function performs to calculate the lap
 	 */
-	private void updateLapList() {
+	private LapRecord calLapTime() {
 		long currentTime = System.currentTimeMillis();
 		String lapTimeString = formatTime(currentTime - baseTime);
 		if (baseTime == prevTime) {
@@ -220,13 +300,13 @@ public class Stopwatch extends Activity {
 		
 		prevTime = currentTime;
 		
-		showLap(lapTimeString, deltaTimeString);
+		return new LapRecord("Lap"+lapNum, lapTimeString, deltaTimeString);
 	}
 	
 	/**
 	 * This function performs to show the lapTime
 	 * */
-	private void showLap(String lapTimeString, String deltaTimeString) {
+	private void showLap(LapRecord lapRecord) {
 		// show the title of lap list if it's the fist to add lap
 		if (null != lapListTitle && lapListTitle.getVisibility() == View.INVISIBLE) {
 			lapListTitle.setVisibility(View.VISIBLE);
@@ -234,7 +314,7 @@ public class Stopwatch extends Activity {
 		
 		if (null != lapRecordAdapter) {
 			lapNum++;
-			lapRecordAdapter.addLapRecord(new LapRecord("Lap"+lapNum, lapTimeString, deltaTimeString));
+			lapRecordAdapter.addLapRecord(lapRecord);
 		}
 	}
 	
@@ -271,7 +351,7 @@ public class Stopwatch extends Activity {
 	}
 	
 	/**
-	 * Description This function performs to require the wake lock, and then ask the screen keeps light if the wake lock is required
+	 * Description This function performs to require the wake lock, and then ask the screen keeps bright if the wake lock is required
 	 * */
 	private void requireWakeLock() {
 		if (null == wakeLock) {
